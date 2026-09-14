@@ -1,0 +1,115 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Also allow manual runs from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Java ────────────────────────────────────────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      # ── yt-dlp binary ───────────────────────────────────────────────────────
+      # Download the static ARM64 build (no Python required on device).
+      # We fetch the three most common ABIs so the APK works on all devices.
+      - name: Download yt-dlp binaries
+        run: |
+          set -e
+          BASE=app/src/main/assets/bin
+
+          # arm64-v8a  (modern phones — most important)
+          mkdir -p $BASE/arm64-v8a
+          curl -fsSL -o $BASE/arm64-v8a/yt-dlp \
+            https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64
+          chmod +x $BASE/arm64-v8a/yt-dlp
+
+          # armeabi-v7a  (older 32-bit phones)
+          mkdir -p $BASE/armeabi-v7a
+          curl -fsSL -o $BASE/armeabi-v7a/yt-dlp \
+            https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l
+          chmod +x $BASE/armeabi-v7a/yt-dlp
+
+          # x86_64  (emulators / Intel tablets)
+          mkdir -p $BASE/x86_64
+          curl -fsSL -o $BASE/x86_64/yt-dlp \
+            https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
+          chmod +x $BASE/x86_64/yt-dlp
+
+          echo "✓ Binaries downloaded:"
+          ls -lh $BASE/arm64-v8a/yt-dlp $BASE/armeabi-v7a/yt-dlp $BASE/x86_64/yt-dlp
+
+      # ── Gradle permissions ──────────────────────────────────────────────────
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # ── Build ───────────────────────────────────────────────────────────────
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      # ── Upload artifact ─────────────────────────────────────────────────────
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dlp-mobile-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+  # ── Release job (runs only on version tags: v1.0.0, etc.) ─────────────────
+  release:
+    name: Build & publish release APK
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Download yt-dlp binaries
+        run: |
+          set -e
+          BASE=app/src/main/assets/bin
+          mkdir -p $BASE/arm64-v8a $BASE/armeabi-v7a $BASE/x86_64
+          curl -fsSL -o $BASE/arm64-v8a/yt-dlp \
+            https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64
+          curl -fsSL -o $BASE/armeabi-v7a/yt-dlp \
+            https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l
+          curl -fsSL -o $BASE/x86_64/yt-dlp \
+            https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
+          chmod +x $BASE/arm64-v8a/yt-dlp $BASE/armeabi-v7a/yt-dlp $BASE/x86_64/yt-dlp
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build release APK (unsigned)
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Create GitHub Release and upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/app-release-unsigned.apk
+          generate_release_notes: true
