@@ -14,20 +14,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/**
- * Download screen: shows a live log of yt-dlp output with a progress
- * spinner while in progress, a success state, or an error state.
- *
- * @param isDownloading   Whether download is still running
- * @param logLines        Live stdout lines from yt-dlp
- * @param error           Error message, or null
- * @param isFinished      True when download completed successfully
- * @param onCancel        Cancel the in-progress download
- * @param onDone          Navigate back to Home after success/error
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadScreen(
@@ -41,7 +31,6 @@ fun DownloadScreen(
 ) {
     val listState = rememberLazyListState()
 
-    // Auto-scroll to bottom as new lines arrive
     LaunchedEffect(logLines.size) {
         if (logLines.isNotEmpty()) {
             listState.animateScrollToItem(logLines.lastIndex)
@@ -122,15 +111,79 @@ fun DownloadScreen(
                         .fillMaxWidth()
                         .padding(16.dp),
                 ) {
-                    Text(
-                        text = error,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    Row(
                         modifier = Modifier.padding(12.dp),
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
 
-            // Live log output
+            if (isDownloading) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(40.dp),
+                            strokeWidth = 3.dp,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Downloading…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            if (isFinished) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "Download complete!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+            }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -138,20 +191,32 @@ fun DownloadScreen(
                     .padding(horizontal = 12.dp),
             ) {
                 items(logLines) { line ->
-                    // Highlight progress lines that start with [download]
                     val isProgress = line.trimStart().startsWith("[download]")
-                    Text(
-                        text = line,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        color = when {
-                            isProgress -> MaterialTheme.colorScheme.primary
-                            line.contains("[ERROR]", ignoreCase = true) ->
-                                MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                        },
-                        modifier = Modifier.padding(vertical = 1.dp),
-                    )
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isProgress)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else
+                                MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                    ) {
+                        Text(
+                            text = line,
+                            fontFamily = FontFamily.Monospace,
+                            fontStyle = FontStyle.Normal,
+                            fontSize = 11.sp,
+                            color = when {
+                                isProgress -> MaterialTheme.colorScheme.onPrimaryContainer
+                                line.contains("[ERROR]", ignoreCase = true) ->
+                                    MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                            },
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    }
                 }
             }
         }
