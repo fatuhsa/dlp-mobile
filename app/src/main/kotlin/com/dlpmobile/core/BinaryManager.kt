@@ -1,7 +1,9 @@
 package com.dlpmobile.core
 
 import android.content.Context
+import android.content.res.AssetFileDescriptor
 import java.io.File
+import java.io.FileOutputStream
 
 /**
  * Manages the yt-dlp binary lifecycle:
@@ -21,17 +23,34 @@ object BinaryManager {
     fun getOrExtract(context: Context): File {
         val destFile = File(context.filesDir, BINARY_NAME)
 
-        // Compare asset size to detect upgrades without versioning the filename.
-        val assetSize = context.assets.open(ASSET_PATH).use { it.available().toLong() }
+        val assetSize = getAssetSize(context)
 
         if (!destFile.exists() || destFile.length() != assetSize) {
             context.assets.open(ASSET_PATH).use { input ->
-                destFile.outputStream().use { input.copyTo(it) }
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
             }
         }
 
-        if (!destFile.canExecute()) destFile.setExecutable(true, true)
+        // Ensure executable permission — required on some devices where
+        // copied files lose the execute bit.
+        if (!destFile.canExecute()) {
+            destFile.setExecutable(true, false)
+        }
+        if (!destFile.canExecute()) {
+            destFile.setExecutable(true, true)
+        }
 
         return destFile
+    }
+
+    private fun getAssetSize(context: Context): Long {
+        val fd: AssetFileDescriptor = context.assets.openFd(ASSET_PATH)
+        return try {
+            fd.length
+        } finally {
+            fd.close()
+        }
     }
 }
