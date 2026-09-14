@@ -1,15 +1,13 @@
 package com.dlpmobile.core
 
 import android.content.Context
-import android.content.res.AssetFileDescriptor
 import java.io.File
 import java.io.FileOutputStream
 
 /**
  * Manages the yt-dlp binary lifecycle:
  * - Extracts the bundled arm64-v8a binary from assets on first launch
- * - Re-extracts if the file is missing or the size changed (version upgrade)
- * - Ensures the file has executable permissions
+ * - Re-extracts if the file is missing, empty, or lacks execute permission
  *
  * Asset layout:
  *   assets/bin/arm64-v8a/yt-dlp
@@ -23,34 +21,20 @@ object BinaryManager {
     fun getOrExtract(context: Context): File {
         val destFile = File(context.filesDir, BINARY_NAME)
 
-        val assetSize = getAssetSize(context)
-
-        if (!destFile.exists() || destFile.length() != assetSize) {
+        // Only re-extract when the file is missing, empty, or non-executable.
+        // This avoids unnecessary re-extraction and correctly handles the
+        // case where the file was copied without executable permission.
+        if (!destFile.exists() || destFile.length() == 0L || !destFile.canExecute()) {
             context.assets.open(ASSET_PATH).use { input ->
                 FileOutputStream(destFile).use { output ->
                     input.copyTo(output)
                 }
             }
-        }
-
-        // Ensure executable permission — required on some devices where
-        // copied files lose the execute bit.
-        if (!destFile.canExecute()) {
+            // Ensure executable permission on all devices.
             destFile.setExecutable(true, false)
-        }
-        if (!destFile.canExecute()) {
             destFile.setExecutable(true, true)
         }
 
         return destFile
-    }
-
-    private fun getAssetSize(context: Context): Long {
-        val fd: AssetFileDescriptor = context.assets.openFd(ASSET_PATH)
-        return try {
-            fd.length
-        } finally {
-            fd.close()
-        }
     }
 }
